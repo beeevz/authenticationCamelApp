@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:spring-security="http://camel.apache.org/schema/spring-security"
+	xmlns:security="http://www.springframework.org/schema/security"
+	xsi:schemaLocation="http://www.springframework.org/schema/security http://www.springframework.org/schema/security/spring-security-4.2.xsd
+		http://camel.apache.org/schema/spring http://camel.apache.org/schema/spring/camel-spring.xsd
+		http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+		http://camel.apache.org/schema/spring-security http://camel.apache.org/schema/spring-security/camel-spring-security.xsd">
+
+	<bean id="nameProcessor" class="authenticationCamelApp.main.nameProcessor" />
+
+	<security:http use-expressions="true">
+		<security:intercept-url pattern="/user"
+			access="hasRole('ROLE_USER') or hasRole('ROLE_ADMIN')" />
+		<security:intercept-url pattern="/admin"
+			access="hasRole('ROLE_ADMIN')" />
+		<security:intercept-url pattern="/adminProcessor"
+			access="hasRole('ROLE_ADMIN')" />
+		<security:intercept-url pattern="/**" access="denyAll" />
+		<security:form-login />
+	</security:http>
+
+	<security:authentication-manager alias="authenticationManager">
+		<security:authentication-provider>
+			<security:user-service>
+				<security:user name="admin" authorities="ROLE_USER, ROLE_ADMIN"
+					password="admin" />
+				<security:user name="user" authorities="ROLE_USER"
+					password="user" />
+			</security:user-service>
+		</security:authentication-provider>
+	</security:authentication-manager>
+
+	<bean id="accessDecisionManager"
+		class="org.springframework.security.access.vote.AffirmativeBased">
+		<constructor-arg>
+			<bean class="org.springframework.security.access.vote.RoleVoter" />
+		</constructor-arg>
+	</bean>
+
+	<authorizationPolicy id="admin" access="ROLE_ADMIN"
+		authenticationManager="authenticationManager" accessDecisionManager="accessDecisionManager"
+		xmlns="http://camel.apache.org/schema/spring-security" />
+	<authorizationPolicy id="user" access="ROLE_USER"
+		xmlns="http://camel.apache.org/schema/spring-security" />
+
+	<camelContext xmlns="http://camel.apache.org/schema/spring">
+		<route>
+			<from uri="servlet:user" />
+			<policy ref="user">
+				<transform>
+					<constant>Normal users can access this service.</constant>
+				</transform>
+			</policy>
+		</route>
+		<route>
+			<from uri="servlet:admin" />
+			<policy ref="admin">
+				<transform>
+					<simple>{${date:now:yyyy-MM-dd}} - Admin users can access this service \r\n</simple>
+				</transform>
+			</policy>
+			<to uri="file:C:/Users/Craig/Desktop/Camel_Time_Log?fileExist=Append&amp;fileName=Log-${date:now:yyyy-MM-dd}.txt" />
+		</route>
+		<route>
+			<from uri="servlet:adminProcessor" />
+			<policy ref="admin">
+				<transform>
+					<simple>{${date:now:yyyy-MM-dd}} - Admin users can access this service \r\n</simple>
+				</transform>
+				<setHeader headerName="CamelFileName">
+					<simple>Log-${date:now:yyyy-MM-dd}.txt</simple>
+				</setHeader>
+				<to uri="bean:nameProcessor"/>
+				<to uri="file:C:/Users/Craig/Desktop/Camel_Time_Log?fileExist=Append&amp;fileName=${header.CamelFileName}" />
+			</policy>
+		</route>
+	</camelContext>
+</beans>
